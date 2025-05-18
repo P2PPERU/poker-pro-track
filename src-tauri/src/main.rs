@@ -3,11 +3,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]  
 
 use tauri::Manager; 
+use tauri::ClipboardManager; // Importar el trait ClipboardManager para acceder a write_text
 mod window_manager; 
 mod auth; 
-mod settings; 
+mod settings;
 mod api;
 mod error;
+mod ocr_bridge;
+mod python_setup;
 
 // Comando para obtener las mesas de póker detectadas 
 #[tauri::command] 
@@ -16,10 +19,10 @@ fn find_poker_tables() -> Vec<(u32, String)> {
 }  
 
 // Comando para analizar una mesa específica  
-#[tauri::command] 
-fn analyze_table(hwnd: u32, config: settings::AppConfig) -> Result<String, String> {
-    window_manager::analyze_table(hwnd, config) 
-}  
+#[tauri::command]
+async fn analyze_table(hwnd: u32, config: settings::AppConfig, manual_nick: Option<String>, force_new_capture: bool) -> Result<String, String> {
+    window_manager::analyze_table(hwnd, config, manual_nick, force_new_capture).await
+}
 
 // Comando para obtener la mesa bajo el cursor 
 #[tauri::command] 
@@ -72,16 +75,36 @@ async fn analyze_stats(data: api::PlayerStats) -> Result<String, String> {
     api::analyze_stats(data, config.openai_api_key).await
 }
 
-// Comando de ejemplo (usado para compatibilidad)
+// Comando para copiar al portapapeles - versión corregida con ClipboardManager
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+fn copy_to_clipboard(app_handle: tauri::AppHandle, text: String) -> Result<bool, String> {
+    match app_handle.clipboard_manager().write_text(text) {
+        Ok(_) => Ok(true),
+        Err(e) => Err(format!("Error al copiar al portapapeles: {}", e))
+    }
+}
+
+// Comando para verificar la disponibilidad de OCR
+#[tauri::command]
+fn check_ocr_available() -> bool {
+    ocr_bridge::check_ocr_availability()
+}
+
+// Comando para configurar el entorno Python
+#[tauri::command]
+fn setup_python_environment() -> Result<bool, String> {
+    match python_setup::ensure_python_env() {
+        Ok(_) => Ok(true),
+        Err(e) => Err(format!("Error al configurar Python: {}", e))
+    }
 }
 
 fn main() {
+    // Configuración inicial
+    let _ = python_setup::ensure_python_env();
+    
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
-            greet,
             find_poker_tables,
             analyze_table,
             get_window_under_cursor,
@@ -91,16 +114,28 @@ fn main() {
             get_app_version,
             clear_nick_cache,
             get_player_stats,
-            analyze_stats
+            analyze_stats,
+            copy_to_clipboard,
+            check_ocr_available,
+            setup_python_environment
         ])
-        .setup(|app| {
+        .setup(|_app| { // Agregado guión bajo para indicar que no se utiliza
             // Inicializar componentes en el arranque
             let config = settings::load_config();
-
-            // Configurar app_handle para ser usado en otros módulos si es necesario
-            let app_handle = app.handle();
             
-            // Otras inicializaciones (logger, etc.)
+            // Crear directorios Python si no existen
+            let _ = python_setup::ensure_python_env();
+            
+            // Pre-inicializar OCR en segundo plano
+            std::thread::spawn(move || {
+                let mut config_map = std::collections::HashMap::new();
+                config_map.insert("idioma_ocr".to_string(), config.idioma_ocr.clone());
+                
+                match ocr_bridge::initialize_ocr(Some(&config_map)) {
+                    Ok(_) => println!("OCR inicializado correctamente en segundo plano"),
+                    Err(e) => eprintln!("Error al inicializar OCR: {}", e),
+                }
+            });
             
             Ok(())
         })
