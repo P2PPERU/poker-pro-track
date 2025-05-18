@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard"; // Crea esta página
 // Estas páginas puedes crearlas como placeholder por ahora
-import Mesas from "./pages/Mesas";         // Crea Mesas.jsx (placeholder)
+import Mesas from "./pages/MesasPage";         // Crea Mesas.jsx (placeholder)
 import Historial from "./pages/Historial"; // Crea Historial.jsx (placeholder)
 import Configuracion from "./pages/Configuracion"; // Crea Configuracion.jsx (placeholder)
 
