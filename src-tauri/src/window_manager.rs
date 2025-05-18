@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::settings::AppConfig;
-use crate::ocr_bridge::{initialize_ocr, capture_and_read_nick}; // Eliminado OcrResult no utilizado
+use crate::ocr_bridge::{initialize_ocr, capture_and_read_nick};
 use crate::error::AppError;
 use regex::Regex;
 use once_cell::sync::Lazy;
@@ -57,18 +57,8 @@ pub fn is_poker_table(title: &str) -> bool {
 
 // Busca todas las ventanas de mesas de póker activas
 pub fn find_poker_tables() -> Vec<(u32, String)> {
-    // Implementación simulada para desarrollo
-    #[cfg(debug_assertions)]
-    {
-        return vec![
-            (1, "PokerStars Table - NL Hold'em $1/$2".to_string()),
-            (2, "PokerStars Table - NL Hold'em $2/$5".to_string()),
-            (3, "GGPoker - $5/$10 No-Limit Hold'em".to_string()),
-        ];
-    }
-    
-    // Implementación real para producción en Windows
-    #[cfg(all(not(debug_assertions), target_os = "windows"))]
+    // Implementación real para Windows
+    #[cfg(target_os = "windows")]
     unsafe {
         use windows_sys::Win32::UI::WindowsAndMessaging::*;
         use windows_sys::Win32::Foundation::*;
@@ -106,30 +96,19 @@ pub fn find_poker_tables() -> Vec<(u32, String)> {
         tables
     }
     
-    // Implementación para otras plataformas
-    #[cfg(all(not(debug_assertions), not(target_os = "windows")))]
+    // Implementación para otras plataformas (no usamos simulación)
+    #[cfg(not(target_os = "windows"))]
     {
-        vec![
-            (1, "Simulación - Poker Table #1".to_string()),
-            (2, "Simulación - Poker Table #2".to_string()),
-        ]
+        // No hay soporte real en otras plataformas, pero devolvemos vector vacío
+        // en lugar de datos simulados para mantener consistencia
+        Vec::new()
     }
 }
 
 // Obtiene el handle de la ventana bajo el cursor
 pub fn get_window_under_cursor() -> Option<(u32, String)> {
-    // Implementación simulada para desarrollo
-    #[cfg(debug_assertions)]
-    {
-        let tables = find_poker_tables();
-        if !tables.is_empty() {
-            return Some(tables[0].clone());
-        }
-        return None;
-    }
-    
-    // Implementación real para producción en Windows
-    #[cfg(all(not(debug_assertions), target_os = "windows"))]
+    // Implementación real para Windows
+    #[cfg(target_os = "windows")]
     unsafe {
         use windows_sys::Win32::UI::WindowsAndMessaging::*;
         use windows_sys::Win32::Foundation::*;
@@ -178,13 +157,10 @@ pub fn get_window_under_cursor() -> Option<(u32, String)> {
         None
     }
     
-    // Implementación para otras plataformas
-    #[cfg(all(not(debug_assertions), not(target_os = "windows")))]
+    // Implementación para otras plataformas (sin simulación)
+    #[cfg(not(target_os = "windows"))]
     {
-        let tables = find_poker_tables();
-        if !tables.is_empty() {
-            return Some(tables[0].clone());
-        }
+        // No hay implementación real para otras plataformas
         None
     }
 }
@@ -285,11 +261,18 @@ fn detect_nick(hwnd: u32, config: &AppConfig) -> Result<String, AppError> {
         }
     }
     
+    // Agregar debug
+    println!("Intentando detectar nick en HWND: {}, Coordenadas: x={}, y={}, w={}, h={}", 
+             hwnd, coords["x"], coords["y"], coords["w"], coords["h"]);
+    
     // Activar ventana
     focus_window(hwnd);
     
     // Llamar a la función de OCR
     let ocr_result = capture_and_read_nick(hwnd, coords)?;
+    
+    // Más debug
+    println!("Resultado OCR: Nick={}, Confianza={}", ocr_result.nick, ocr_result.confidence);
     
     // Guardar en caché
     if let Ok(mut cache) = NICK_CACHE.lock() {
@@ -379,18 +362,22 @@ pub fn focus_window(hwnd: u32) -> Option<(u32, u32)> {
         use windows_sys::Win32::UI::WindowsAndMessaging::*;
         use windows_sys::Win32::Foundation::*;
         
+        println!("Intentando dar foco a ventana: {}", hwnd);
         let current_hwnd = GetForegroundWindow();
         if SetForegroundWindow(hwnd as HWND) != 0 {
+            println!("Foco establecido correctamente");
             // Pequeña pausa para asegurar que la ventana recibe el foco
             std::thread::sleep(std::time::Duration::from_millis(100));
             return Some((hwnd, current_hwnd as u32));
         }
+        println!("No se pudo establecer el foco");
         None
     }
     
-    // Implementación mínima para otras plataformas
+    // Implementación para otras plataformas
     #[cfg(not(target_os = "windows"))]
     {
+        println!("Simulando foco en plataforma no-Windows");
         Some((hwnd, 0))
     }
 }
@@ -432,9 +419,10 @@ pub fn click_on_window_point(hwnd: u32, x_offset: i32, y_offset: i32) -> bool {
         result != 0 && result2 != 0
     }
     
-    // Implementación simulada para otras plataformas
+    // Implementación para otras plataformas
     #[cfg(not(target_os = "windows"))]
     {
+        // No hacemos simulación, simplemente devolvemos true
         true
     }
 }

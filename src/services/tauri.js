@@ -166,3 +166,82 @@ export const saveFileDialog = async (options = {}) => {
     return null;
   }
 };
+
+// NUEVAS FUNCIONES PARA DETECTOR DE PERFILES
+
+export const extractNick = async (hwnd, coords) => {
+  try {
+    return await invoke('extract_nick', { hwnd, coords });
+  } catch (error) {
+    console.error('Error al extraer nick:', error);
+    throw new Error(`Error al extraer nick: ${error}`);
+  }
+};
+
+export const captureWindowRegion = async (hwnd, region) => {
+  try {
+    return await invoke('capture_window_region', { hwnd, region });
+  } catch (error) {
+    console.error('Error al capturar región de ventana:', error);
+    throw new Error(`Error al capturar región de ventana: ${error}`);
+  }
+};
+
+export const registerRightClickHandler = async () => {
+  try {
+    return await invoke('register_right_click_handler');
+  } catch (error) {
+    console.error('Error al registrar handler de clic derecho:', error);
+    throw new Error(`Error al registrar handler de clic derecho: ${error}`);
+  }
+};
+
+export const unregisterRightClickHandler = async () => {
+  try {
+    return await invoke('unregister_right_click_handler');
+  } catch (error) {
+    console.error('Error al desregistrar handler de clic derecho:', error);
+    throw new Error(`Error al desregistrar handler de clic derecho: ${error}`);
+  }
+};
+
+export const setDetectorActive = async (active) => {
+  try {
+    return await invoke('set_detector_active', { active });
+  } catch (error) {
+    console.error('Error al cambiar estado del detector:', error);
+    throw new Error(`Error al cambiar estado del detector: ${error}`);
+  }
+};
+
+export const checkColorPattern = async (imageData, colorPattern, threshold = 30, minPixels = 1000) => {
+  try {
+    return await invoke('check_color_pattern', { 
+      imageData, 
+      colorPattern, 
+      threshold, 
+      minPixels 
+    });
+  } catch (error) {
+    console.error('Error al verificar patrón de color:', error);
+    return false;
+  }
+};
+
+export const detectAvatarCircle = async (imageData) => {
+  try {
+    return await invoke('detect_avatar_circle', { imageData });
+  } catch (error) {
+    console.error('Error al detectar círculo de avatar:', error);
+    return false;
+  }
+};
+
+export const getWindowRect = async (hwnd) => {
+  try {
+    return await invoke('get_window_rect', { hwnd });
+  } catch (error) {
+    console.error('Error al obtener rectángulo de ventana:', error);
+    return { width: 0, height: 0, left: 0, top: 0 };
+  }
+};

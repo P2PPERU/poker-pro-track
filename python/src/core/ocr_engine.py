@@ -175,7 +175,7 @@ def capture_window_region(hwnd, region):
         # Crear imagen vacía en caso de error
         return Image.new('RGB', (w, h), (0, 0, 0))
 
-def enhance_image_for_ocr(img):
+def enhance_image_for_ocr(img, is_profile=False):
     """Mejora la imagen para obtener mejores resultados OCR"""
     try:
         # Hacer una copia para no modificar la original
@@ -185,24 +185,96 @@ def enhance_image_for_ocr(img):
         if enhanced.width < 100 or enhanced.height < 20:
             enhanced = enhanced.resize((enhanced.width*2, enhanced.height*2), Image.LANCZOS)
         
-        # Aplicar filtros para mejorar legibilidad
-        # 1. Convertir a escala de grises
-        enhanced = enhanced.convert('L')
-        
-        # 2. Aumentar contraste
-        enhancer = ImageEnhance.Contrast(enhanced)
-        enhanced = enhancer.enhance(2.0)
-        
-        # 3. Aumentar nitidez
-        enhanced = enhanced.filter(ImageFilter.SHARPEN)
-        
-        # 4. Aumentar brillo ligeramente
-        enhancer = ImageEnhance.Brightness(enhanced)
-        enhanced = enhancer.enhance(1.2)
+        # Aplicar filtros específicos según el tipo de imagen
+        if is_profile:
+            # Optimización para perfiles de jugadores (fondo azul, texto claro)
+            # 1. Aumentar contraste específicamente para texto sobre fondo azul
+            enhancer = ImageEnhance.Contrast(enhanced)
+            enhanced = enhancer.enhance(2.5)  # Mayor contraste para perfiles
+            
+            # 2. Aumentar brillo para mejorar visibilidad del texto claro
+            enhancer = ImageEnhance.Brightness(enhanced)
+            enhanced = enhanced.enhance(1.3)
+            
+            # 3. Convertir a escala de grises
+            enhanced = enhanced.convert('L')
+            
+            # 4. Umbralizar para maximizar contraste texto/fondo
+            try:
+                from PIL import ImageOps
+                threshold = 150
+                enhanced = ImageOps.autocontrast(enhanced, cutoff=10)
+            except (ImportError, AttributeError):
+                pass  # Ignorar si ImageOps no está disponible
+            
+            # 5. Aplicar filtro de nitidez doble para textos en perfiles
+            enhanced = enhanced.filter(ImageFilter.SHARPEN)
+            enhanced = enhanced.filter(ImageFilter.SHARPEN)
+        else:
+            # Filtros estándar para otras imágenes
+            # 1. Convertir a escala de grises
+            enhanced = enhanced.convert('L')
+            
+            # 2. Aumentar contraste
+            enhancer = ImageEnhance.Contrast(enhanced)
+            enhanced = enhancer.enhance(2.0)
+            
+            # 3. Aumentar nitidez
+            enhanced = enhanced.filter(ImageFilter.SHARPEN)
+            
+            # 4. Aumentar brillo ligeramente
+            enhancer = ImageEnhance.Brightness(enhanced)
+            enhanced = enhanced.enhance(1.2)
         
         return enhanced
     except Exception as e:
         logger.error(f"Error al mejorar imagen: {e}")
+        return img  # Devolver imagen original si hay error
+    
+def enhance_image_for_profile(img):
+    """Mejora específicamente imágenes de perfiles de jugadores de póker"""
+    try:
+        # Hacer una copia para no modificar la original
+        enhanced = img.copy()
+        
+        # 1. Detectar color de fondo
+        # Para perfiles de póker como el de la imagen ejemplo (Ryunouske)
+        # con fondo azul oscuro y texto claro
+        pixels = list(enhanced.getdata())
+        blue_pixels = sum(1 for r, g, b in pixels if b > max(r, g) + 30)
+        is_blue_bg = blue_pixels > (len(pixels) * 0.3)  # Si más del 30% son píxeles azules
+        
+        if is_blue_bg:
+            # Optimizaciones específicas para fondo azul
+            # 1. Convertir a HSV y aumentar saturación de azul
+            from PIL import ImageEnhance
+            enhancer = ImageEnhance.Color(enhanced)
+            enhanced = enhancer.enhance(1.5)
+            
+            # 2. Aumentar brillo para texto claro
+            enhancer = ImageEnhance.Brightness(enhanced)
+            enhanced = enhancer.enhance(1.4)
+        
+        # 3. Aumentar contraste para perfiles
+        enhancer = ImageEnhance.Contrast(enhanced)
+        enhanced = enhancer.enhance(2.8)
+        
+        # 4. Convertir a escala de grises para mejor OCR
+        enhanced = enhanced.convert('L')
+        
+        # 5. Aplicar filtro de nitidez extra para los bordes del texto
+        enhanced = enhanced.filter(ImageFilter.SHARPEN)
+        enhanced = enhanced.filter(ImageFilter.SHARPEN)
+        
+        # 6. Escalar imagen para mejorar detección
+        if enhanced.width < 150:
+            scale_factor = 150 / enhanced.width
+            new_size = (int(enhanced.width * scale_factor), int(enhanced.height * scale_factor))
+            enhanced = enhanced.resize(new_size, Image.LANCZOS)
+        
+        return enhanced
+    except Exception as e:
+        logger.error(f"Error al mejorar imagen de perfil: {e}")
         return img  # Devolver imagen original si hay error
 
 def generate_image_hash(img, hash_size=16):
@@ -226,10 +298,10 @@ def generate_image_hash(img, hash_size=16):
         logger.error(f"Error al generar hash de imagen: {e}")
         return "error_hash"  # Hash de error
 
-def capture_and_read_nick(hwnd, coords):
+def capture_and_read_nick(hwnd, coords, enhance_profile=False):
     """Captura y lee el nick de un jugador en una ventana de póker"""
     global ocr, ocr_initialized
-    
+
     # Inicializar OCR si no está disponible
     if ocr is None or not ocr_initialized:
         if not initialize_ocr():
@@ -239,18 +311,18 @@ def capture_and_read_nick(hwnd, coords):
                 "confidence": 0.0,
                 "image_hash": ""
             }
-    
+
     try:
         # Extraer coordenadas
         x = int(coords.get("x", 0))
         y = int(coords.get("y", 0))
         w = int(coords.get("w", 100))
         h = int(coords.get("h", 30))
-        
+
         # Capturar región
         logger.info(f"Capturando región de ventana {hwnd}: {x},{y} {w}x{h}")
         img = capture_window_region(hwnd, (x, y, w, h))
-        
+
         # Verificar que la imagen es válida
         if img.width == 0 or img.height == 0:
             logger.error(f"Imagen capturada inválida: {img.width}x{img.height}")
@@ -259,7 +331,7 @@ def capture_and_read_nick(hwnd, coords):
                 "confidence": 0.0,
                 "image_hash": ""
             }
-        
+
         # Guardar imagen para depuración
         timestamp = int(time.time())
         debug_path = os.path.join("capturas", f"nick_{hwnd}_{timestamp}.png")
@@ -268,25 +340,32 @@ def capture_and_read_nick(hwnd, coords):
             logger.info(f"Imagen guardada en {debug_path}")
         except Exception as save_error:
             logger.warning(f"No se pudo guardar imagen: {save_error}")
-        
+
         # Generar hash de imagen
         img_hash = generate_image_hash(img)
-        
+
         # Mejorar imagen para OCR
-        img_enhanced = enhance_image_for_ocr(img)
+        if enhance_profile:
+            # Usar optimización para perfiles
+            img_enhanced = enhance_image_for_profile(img)
+            logger.info("Usando mejora específica para perfiles")
+        else:
+            # Usar mejora estándar
+            img_enhanced = enhance_image_for_ocr(img)
+
         enhanced_path = os.path.join("capturas", f"nick_{hwnd}_{timestamp}_enhanced.png")
         try:
             img_enhanced.save(enhanced_path)
         except:
             pass
-        
+
         # Ejecutar OCR
         logger.info("Ejecutando OCR en imagen mejorada")
         results = ocr.ocr(np.array(img_enhanced), cls=True)
-        
+
         # Procesar resultados
         detected_texts = []
-        
+
         if results and len(results) > 0 and results[0]:
             for line in results:
                 for word_info in line:
@@ -294,9 +373,16 @@ def capture_and_read_nick(hwnd, coords):
                         text = word_info[1][0].strip()
                         confidence = float(word_info[1][1])
                         if text:
-                            logger.info(f"Texto detectado: '{text}' (confianza: {confidence:.2f})")
-                            detected_texts.append((text, confidence))
-        
+                            # Si es un perfil, dar prioridad a textos que no contengan "ID:"
+                            if enhance_profile:
+                                # Eliminar "ID:" del comienzo si existe
+                                clean_text = text.replace("ID:", "").strip()
+                                logger.info(f"Texto de perfil detectado: '{clean_text}' (confianza: {confidence:.2f})")
+                                detected_texts.append((clean_text, confidence))
+                            else:
+                                logger.info(f"Texto detectado: '{text}' (confianza: {confidence:.2f})")
+                                detected_texts.append((text, confidence))
+
         # Si se detectó algo, tomar el de mayor confianza
         if detected_texts:
             detected_texts.sort(key=lambda x: x[1], reverse=True)
@@ -311,7 +397,7 @@ def capture_and_read_nick(hwnd, coords):
             # Intentar un segundo enfoque sin mejoras
             logger.info("Segundo intento: OCR en imagen original")
             results = ocr.ocr(np.array(img), cls=True)
-            
+
             if results and len(results) > 0 and results[0]:
                 for line in results:
                     for word_info in line:
@@ -325,7 +411,7 @@ def capture_and_read_nick(hwnd, coords):
                                     "confidence": float(confidence),
                                     "image_hash": img_hash
                                 }
-            
+
             # Si aún no hay resultados, verificar si hay una alternativa
             logger.warning("No se detectó texto en la imagen")
             try:
@@ -341,19 +427,19 @@ def capture_and_read_nick(hwnd, coords):
                     }
             except:
                 pass
-                
+
             # Si todo falla, devolver error
             return {
                 "nick": "NoText",
                 "confidence": 0.0,
                 "image_hash": img_hash
             }
-    
+
     except Exception as e:
         logger.error(f"Error en captura/OCR: {e}")
         import traceback
         logger.error(traceback.format_exc())
-        
+
         return {
             "nick": "Error",
             "confidence": 0.0,

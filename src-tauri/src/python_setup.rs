@@ -196,27 +196,69 @@ fn install_python_dependencies(python_dir: &PathBuf) -> Result<(), AppError> {
 
 // Verifica que OCR está correctamente instalado
 fn check_ocr_installation() -> Result<(), AppError> {
+    // NUEVO BLOQUE:
+    let output = Command::new("python")
+        .arg("-c")
+        .arg("import sys; print('PYTHON-EXE:', sys.executable); print('PYTHON-VER:', sys.version)")
+        .output();
+
+    if let Ok(out) = output {
+        println!(
+            ">>> [DEBUG] Python desde Rust:\n{}",
+            String::from_utf8_lossy(&out.stdout)
+        );
+    } else {
+        println!(">>> [DEBUG] No se pudo ejecutar python para mostrar ruta y versión.");
+    }
+
     println!("Verificando instalación de PaddleOCR...");
-    
-    // Intentar importar PaddleOCR
+
     let output = Command::new("python")
         .arg("-c")
         .arg("try: import paddleocr; print('OK'); except Exception as e: print(f'Error: {e}')")
         .output()
         .map_err(|e| AppError::Io(e))?;
-    
+
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+    println!(">>> [DEBUG] PaddleOCR stdout: '{}'", stdout);
+    println!(">>> [DEBUG] PaddleOCR stderr: '{}'", stderr);
+
     if !output.status.success() || !stdout.starts_with("OK") {
         println!("Advertencia: PaddleOCR no está correctamente instalado");
         println!("Salida: {}", stdout);
-        
+
         // Intentar una instalación directa como último recurso
         let _ = Command::new("pip")
             .arg("install")
             .arg("paddleocr")
             .output();
     }
-    
+
+    // Intentar importar PaddleOCR
+    let output = Command::new("python")
+        .arg("-c")
+        .arg("try:\n import paddleocr\n print('OK')\nexcept Exception as e:\n print(f'Error: {e}')")
+        .output()
+        .map_err(|e| AppError::Io(e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+    println!(">>> [DEBUG] PaddleOCR stdout: '{}'", stdout);
+    println!(">>> [DEBUG] PaddleOCR stderr: '{}'", stderr);
+
+    if !output.status.success() || !stdout.starts_with("OK") {
+        println!("Advertencia: PaddleOCR no está correctamente instalado");
+        println!("Salida: {}", stdout);
+
+        // Intentar una instalación directa como último recurso
+        let _ = Command::new("pip")
+            .arg("install")
+            .arg("paddleocr")
+            .output();
+    }
+
     Ok(())
 }
