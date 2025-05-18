@@ -1,31 +1,65 @@
 // src/hooks/useMesas.js
 import { useState, useEffect } from 'react';
-// Más adelante importaremos: import { invoke } from '@tauri-apps/api';
+import { findPokerTables, analyzeTable } from '../services/tauri';
+import { useAuth } from '../context/AuthContext';
 
 export function useMesas() {
   const [mesas, setMesas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
+  const { token } = useAuth();
+  
   const refreshMesas = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // En el futuro, esto será una llamada real a Tauri:
-      // const result = await invoke('find_poker_tables');
-      // setMesas(result);
+      // Llamada real a Tauri
+      const tables = await findPokerTables();
       
-      // Por ahora, usamos datos de muestra:
-      setTimeout(() => {
-        setMesas([
-          { id: 1, title: 'X-Poker Mesa #1', players: 6, active: true },
-          { id: 2, title: 'X-Poker Mesa #2', players: 4, active: true },
-        ]);
-        setLoading(false);
-      }, 1000);
+      const formattedTables = tables.map(([id, title]) => ({
+        id,
+        title,
+        active: true,
+        players: estimatePlayerCount(title)
+      }));
+      
+      setMesas(formattedTables);
+    } catch (err) {
+      console.error("Error al obtener mesas:", err);
+      setError(err.toString());
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Estima el número de jugadores basado en el título de la mesa (simulación)
+  const estimatePlayerCount = (title) => {
+    // Extraer información de la cantidad de jugadores, si está disponible en el título
+    // Por ejemplo: "9-max Table (6/9)" indicaría 6 jugadores
+    const match = title.match(/\((\d+)\/(\d+)\)/);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+    
+    // Valores por defecto para demostración
+    if (title.includes('2/$5')) return 7;
+    if (title.includes('1/$2')) return 9;
+    
+    // Valor por defecto
+    return Math.floor(Math.random() * 6) + 4; // entre 4 y 9 jugadores
+  };
+  
+  // Analizar mesa seleccionada
+  const analyzeMesa = async (hwnd, config) => {
+    try {
+      setLoading(true);
+      const result = await analyzeTable(hwnd, config);
+      return result;
     } catch (err) {
       setError(err.toString());
+      throw err;
+    } finally {
       setLoading(false);
     }
   };
@@ -39,6 +73,7 @@ export function useMesas() {
     mesas,
     loading,
     error,
-    refreshMesas
+    refreshMesas,
+    analyzeMesa
   };
 }

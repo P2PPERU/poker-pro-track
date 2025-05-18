@@ -2,40 +2,56 @@ import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import {
-  Box, Button, FormControl, FormLabel, Input, VStack, Heading, Text, useToast
+  Box, 
+  Button, 
+  FormControl, 
+  FormLabel, 
+  Input, 
+  VStack, 
+  Heading, 
+  Text, 
+  useToast,
+  Alert,
+  AlertIcon,
+  AlertDescription
 } from "@chakra-ui/react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const [error, setError] = useState("");
+  const { login, loading } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
+    setError("");
 
     try {
       await login(email, password);
-      toast({ title: "¡Bienvenido!", status: "success", duration: 2000 });
+      toast({ 
+        title: "¡Bienvenido!", 
+        status: "success", 
+        duration: 2000 
+      });
       navigate("/dashboard");
     } catch (err) {
-      toast({
-        title: "Error",
-        description: err.message,
-        status: "error",
-        duration: 3000,
-      });
-    } finally {
-      setIsLoading(false);
+      setError(err.message || "Error al iniciar sesión");
     }
   };
 
   return (
     <Box maxW="400px" mx="auto" mt="10vh" bg="white" boxShadow="md" p={8} borderRadius="xl">
       <Heading mb={6} size="lg">Iniciar sesión</Heading>
+      
+      {error && (
+        <Alert status="error" mb={4} borderRadius="md">
+          <AlertIcon />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      
       <form onSubmit={handleSubmit}>
         <VStack spacing={4}>
           <FormControl isRequired>
@@ -59,7 +75,7 @@ export default function LoginPage() {
           <Button
             type="submit"
             colorScheme="blue"
-            isLoading={isLoading}
+            isLoading={loading}
             loadingText="Entrando..."
             width="full"
           >

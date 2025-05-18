@@ -1,5 +1,5 @@
 // src/components/mesas/MesasDetectadas.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Table,
@@ -15,16 +15,21 @@ import {
   Button,
   Badge,
   Tooltip,
-  useDisclosure
+  useToast
 } from '@chakra-ui/react';
 import { FaSync, FaSearch, FaDesktop, FaMouse, FaChess } from 'react-icons/fa';
 import SectionHeader from '../ui/SectionHeader';
 import MesasToolbar from './MesasToolbar';
+import { useMesas } from '../../hooks/useMesas';
+import { loadConfig, getWindowUnderCursor, analyzeTable } from '../../services/tauri';
 
 const MesasDetectadas = () => {
-  const [mesas, setMesas] = useState([]);
   const [selectedMesa, setSelectedMesa] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [config, setConfig] = useState(null);
+  const toast = useToast();
+  
+  // Usamos nuestro hook para manejar las mesas
+  const { mesas, loading, error, refreshMesas } = useMesas();
   
   // Colores para tema claro/oscuro
   const tableBg = useColorModeValue('white', 'gray.800');
@@ -32,36 +37,126 @@ const MesasDetectadas = () => {
   const borderColor = useColorModeValue('gray.200', 'gray.600');
   const hoverBg = useColorModeValue('blue.50', 'gray.700');
 
-  // Función para refrescar la lista de mesas (mock por ahora)
-  const refreshMesas = () => {
-    setLoading(true);
-    // Aquí eventualmente invocaremos la función Tauri
-    setTimeout(() => {
-      setMesas([
-        { id: 1, title: 'X-Poker Mesa #1', players: 6, active: true },
-        { id: 2, title: 'X-Poker Mesa #2', players: 4, active: true },
-      ]);
-      setLoading(false);
-    }, 1000);
-  };
+  // Cargar la configuración al inicio
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const appConfig = await loadConfig();
+        setConfig(appConfig);
+      } catch (err) {
+        console.error("Error al cargar configuración:", err);
+        toast({
+          title: "Error",
+          description: "No se pudo cargar la configuración",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    };
+    
+    fetchConfig();
+  }, [toast]);
 
   // Función para seleccionar una mesa
   const handleSelectMesa = (mesa) => {
     setSelectedMesa(mesa.id === selectedMesa ? null : mesa.id);
   };
 
-  // Función para analizar mesa seleccionada (mock por ahora)
-  const handleAnalyzeMesa = () => {
-    if (!selectedMesa) return;
+  // Función para analizar mesa seleccionada
+  const handleAnalyzeMesa = async () => {
+    if (!selectedMesa || !config) return;
     
-    // Aquí eventualmente invocaremos la función Tauri para analizar
-    console.log(`Analizando mesa ID: ${selectedMesa}`);
+    try {
+      toast({
+        title: "Analizando",
+        description: "Analizando mesa seleccionada...",
+        status: "info",
+        duration: 2000,
+        isClosable: true,
+      });
+      
+      const result = await analyzeTable(selectedMesa, config);
+      
+      toast({
+        title: "Análisis completado",
+        description: "Análisis de jugador completado",
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+      });
+      
+      // Mostrar resultados (en una implementación real, podría ser en un modal)
+      console.log("Resultado del análisis:", result);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err.toString(),
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
   };
   
-  // Función para analizar mesa bajo cursor (mock por ahora)
-  const handleAnalyzeCursor = () => {
-    // Aquí eventualmente invocaremos la función Tauri
-    console.log('Analizando mesa bajo cursor');
+  // Función para analizar mesa bajo cursor
+  const handleAnalyzeCursor = async () => {
+    if (!config) return;
+    
+    try {
+      toast({
+        title: "Buscando",
+        description: "Buscando mesa bajo el cursor...",
+        status: "info",
+        duration: 2000,
+        isClosable: true,
+      });
+      
+      const result = await getWindowUnderCursor();
+      
+      if (!result) {
+        toast({
+          title: "Error",
+          description: "No se encontró una mesa de póker bajo el cursor",
+          status: "warning",
+          duration: 5000,
+          isClosable: true,
+        });
+        return;
+      }
+      
+      const [hwnd, title] = result;
+      
+      toast({
+        title: "Mesa encontrada",
+        description: `Mesa encontrada: ${title}`,
+        status: "success",
+        duration: 2000,
+        isClosable: true,
+      });
+      
+      // Analizar la mesa
+      const analysisResult = await analyzeTable(hwnd, config);
+      
+      toast({
+        title: "Análisis completado",
+        description: "Análisis de jugador completado",
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+      });
+      
+      // Mostrar resultados (en una implementación real, podría ser en un modal)
+      console.log("Resultado del análisis:", analysisResult);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err.toString(),
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
   };
 
   return (
@@ -138,6 +233,14 @@ const MesasDetectadas = () => {
         isSelectedDisabled={!selectedMesa}
         isLoading={loading}
       />
+      
+      {/* Mostrar error si existe */}
+      {error && (
+        <Box mt={4} p={4} bg="red.100" color="red.800" borderRadius="md">
+          <Text fontWeight="bold">Error:</Text>
+          <Text>{error}</Text>
+        </Box>
+      )}
     </Box>
   );
 };

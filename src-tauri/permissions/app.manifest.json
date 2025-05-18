@@ -1,0 +1,13 @@
+{
+  "clipboard": [
+    "allow-read-text",
+    "allow-write-text"
+  ],
+  "shell": [
+    "allow-open"
+  ],
+  "dialog": [
+    "allow-open",
+    "allow-save"
+  ]
+}
